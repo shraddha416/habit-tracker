@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#faf9f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Habit Tracker">
+<title>Our Habit Tracker</title>
+<style>
+  :root {
+    --her: #e91e8c; --her-bg: #fde7f3;
+    --him: #2563eb; --him-bg: #e0ecff;
+    --gym: #16a34a; --sugar: #9333ea; --bath: #0891b2;
+    --bg: #faf9f7; --card: #fff; --text: #1f2937;
+    --muted: #6b7280; --border: #e5e7eb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  button, .day { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+    padding: 16px 16px 32px; max-width: 900px; margin: 0 auto;
+  }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  header h1 { font-size: 1.35rem; }
+  .hdr-right { display: flex; align-items: center; gap: 8px; }
+  .pill {
+    font-size: 0.7rem; padding: 4px 9px; border-radius: 999px;
+    background: #f3f4f6; color: var(--muted); white-space: nowrap;
+  }
+  .pill.ok { background: #dcfce7; color: #15803d; }
+  .pill.busy { background: #fef3c7; color: #a16207; }
+  .pill.err { background: #fee2e2; color: #b91c1c; }
+  .iconbtn {
+    background: var(--card); border: 1px solid var(--border); border-radius: 9px;
+    width: 40px; height: 40px; font-size: 1.05rem; cursor: pointer;
+  }
+  .iconbtn:hover { background: #f3f4f6; }
+  .nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 14px 0; }
+  .nav button {
+    background: var(--card); border: 1px solid var(--border); border-radius: 9px;
+    padding: 9px 17px; font-size: 1.05rem; cursor: pointer; min-height: 44px;
+  }
+  .nav button:hover { background: #f3f4f6; }
+  .nav h2 { font-size: 1.15rem; min-width: 175px; text-align: center; }
+  .names {
+    display: flex; justify-content: center; gap: 16px;
+    font-size: .74rem; color: var(--muted); margin-bottom: 10px;
+  }
+  .names .a { color: var(--her); font-weight: 700; }
+  .names .b { color: var(--him); font-weight: 700; }
+  #alerts { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
+  .alert {
+    border-radius: 11px; padding: 11px 13px; font-size: .84rem; line-height: 1.45;
+    border: 1px solid; display: flex; gap: 9px; align-items: flex-start;
+  }
+  .alert .ic { font-size: 1.15rem; line-height: 1.2; }
+  .alert.warn  { background: #fff7ed; border-color: #fdba74; color: #9a3412; }
+  .alert.cheer { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .dow { text-align: center; font-size: 0.73rem; font-weight: 600; color: var(--muted); padding: 4px 0; }
+  .day {
+    position: relative; aspect-ratio: 1; border-radius: 10px;
+    background: var(--card); border: 1px solid var(--border);
+    cursor: pointer; overflow: hidden; transition: transform .1s;
+  }
+  .day:hover { transform: scale(1.05); z-index: 2; }
+  .day.empty { background: transparent; border: none; cursor: default; }
+  .day.empty:hover { transform: none; }
+  .day.future { opacity: .45; }
+  .day .num {
+    position: absolute; top: 3px; left: 50%; transform: translateX(-50%);
+    font-size: .7rem; font-weight: 700; z-index: 3;
+    background: rgba(255,255,255,.85); border-radius: 6px; padding: 0 4px;
+  }
+  .day.today .num { background: var(--text); color: #fff; }
+  .half { position: absolute; inset: 0; }
+  .half.her { clip-path: polygon(0 0, 100% 0, 0 100%); background: var(--her-bg); }
+  .half.him { clip-path: polygon(100% 0, 100% 100%, 0 100%); background: var(--him-bg); }
+  .half.gym-ring.her { box-shadow: inset 4px 4px 0 0 var(--gym); }
+  .half.gym-ring.him { box-shadow: inset -4px -4px 0 0 var(--gym); }
+  .icons-her {
+    position: absolute; top: 16%; left: 6%; max-width: 56%; font-size: .78rem; z-index: 2;
+    display: flex; flex-wrap: wrap; line-height: 1; gap: 0;
+  }
+  .icons-him {
+    position: absolute; bottom: 4%; right: 6%; max-width: 56%; font-size: .78rem; z-index: 2;
+    display: flex; flex-wrap: wrap; justify-content: flex-end; line-height: 1; gap: 0;
+  }
+  .overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4);
+    z-index: 10; align-items: center; justify-content: center; padding: 12px;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--card); border-radius: 16px; padding: 20px;
+    width: min(94vw, 400px); max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,.2);
+  }
+  .modal h3 { text-align: center; margin-bottom: 14px; font-size: 1rem; }
+  .person-row { margin-bottom: 14px; }
+  .person-row .label { font-size: .85rem; font-weight: 700; margin-bottom: 6px; }
+  .person-row.her .label { color: var(--her); }
+  .person-row.him .label { color: var(--him); }
+  .person-row .sub {
+    font-size: .68rem; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); margin: 8px 0 4px;
+  }
+  .toggles { display: grid; gap: 7px; }
+  .toggles.bad  { grid-template-columns: repeat(3, 1fr); }
+  .toggles.good { grid-template-columns: repeat(2, 1fr); }
+  .toggle {
+    border: 2px solid var(--border); border-radius: 10px; background: var(--card);
+    padding: 10px 2px; font-size: .72rem; cursor: pointer; text-align: center; min-height: 62px;
+  }
+  .toggle .em { font-size: 1.3rem; display: block; }
+  .toggle.on[data-habit="alcohol"] { border-color: #d97706; background: #fef3c7; }
+  .toggle.on[data-habit="smoke"]   { border-color: #6b7280; background: #e5e7eb; }
+  .toggle.on[data-habit="sugar"]   { border-color: var(--sugar); background: #f3e8ff; }
+  .toggle.on[data-habit="bath"]    { border-color: var(--bath); background: #cffafe; }
+  .toggle.on[data-habit="gym"]     { border-color: var(--gym); background: #dcfce7; }
+  .btn {
+    width: 100%; margin-top: 8px; padding: 12px; border: none; border-radius: 10px;
+    background: var(--text); color: #fff; font-size: .92rem; cursor: pointer; min-height: 46px;
+  }
+  .btn.sec { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  .btn.danger { background: #fee2e2; color: #b91c1c; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: .75rem; color: var(--muted); margin-bottom: 3px; }
+  .field input {
+    width: 100%; padding: 11px; border: 1px solid var(--border); border-radius: 9px;
+    font-size: .95rem; font-family: inherit; background: var(--card); color: var(--text);
+  }
+  .hint { font-size: .72rem; color: var(--muted); line-height: 1.5; margin: 8px 0 12px; }
+  .summary { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sumcard {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 13px 12px;
+  }
+  .sumcard h4 { font-size: .95rem; margin-bottom: 8px; }
+  .sumcard.her h4 { color: var(--her); }
+  .sumcard.him h4 { color: var(--him); }
+  .sumcard .cap {
+    font-size: .62rem; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); margin: 9px 0 3px;
+  }
+  .sumcard .line { font-size: .82rem; margin: 2px 0; white-space: nowrap; }
+  .sumcard .strk {
+    font-size: .82rem; margin: 3px 0; display: flex;
+    justify-content: space-between; gap: 6px; align-items: baseline;
+  }
+  .sumcard .strk b.ok  { color: var(--gym); }
+  .sumcard .strk b.due { color: #dc2626; }
+  .sumcard hr { border: none; border-top: 1px dashed var(--border); margin: 9px 0 0; }
+  .keyline {
+    text-align: center; font-size: .68rem; color: var(--muted); margin-top: 9px;
+  }
+  @media (max-width: 480px) {
+    body { padding: 10px 7px 28px; }
+    header h1 { font-size: 1.05rem; }
+    .nav { gap: 8px; margin: 10px 0; }
+    .nav h2 { min-width: 130px; font-size: 1rem; }
+    .names { gap: 10px; font-size: .66rem; margin-bottom: 8px; }
+    .grid { gap: 3px; }
+    .day { border-radius: 7px; }
+    .day:hover { transform: none; }
+    .day .num { font-size: .62rem; }
+    .icons-her { font-size: .56rem; top: 18%; left: 4%; }
+    .icons-him { font-size: .56rem; bottom: 3%; right: 4%; }
+    .half.gym-ring.her { box-shadow: inset 3px 3px 0 0 var(--gym); }
+    .half.gym-ring.him { box-shadow: inset -3px -3px 0 0 var(--gym); }
+    .summary { grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 14px; }
+    .sumcard { padding: 10px 9px; }
+    .sumcard h4 { font-size: .85rem; }
+    .sumcard .line, .sumcard .strk { font-size: .74rem; }
+    .sumcard .cap { font-size: .58rem; }
+    .keyline { font-size: .62rem; }
+    .modal { padding: 16px; }
+    .toggle { padding: 11px 2px; font-size: .76rem; min-height: 64px; }
+    .toggle .em { font-size: 1.4rem; }
+    .alert { font-size: .78rem; padding: 10px 11px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🗓️ Habit Tracker</h1>
+  <div class="hdr-right">
+    <span class="pill" id="status">offline</span>
+    <button class="iconbtn" id="syncBtn" title="Sync now">🔄</button>
+    <button class="iconbtn" id="gearBtn" title="Settings">⚙️</button>
+  </div>
+</header>
+
+<div class="nav">
+  <button id="prev">◀</button>
+  <h2 id="monthLabel"></h2>
+  <button id="next">▶</button>
+</div>
+
+<div class="names">
+  <span>◤ <span class="a">Shraddha</span></span>
+  <span><span class="b">Shivam</span> ◢</span>
+</div>
+
+<div id="alerts"></div>
+
+<div class="grid" id="grid"></div>
+
+<div class="summary">
+  <div class="sumcard her"><h4>Shraddha</h4><div id="sumHer"></div></div>
+  <div class="sumcard him"><h4>Shivam</h4><div id="sumHim"></div></div>
+</div>
+<div class="keyline">
+  <span style="color:var(--gym);font-weight:700">green</span> = done today, current run ·
+  <span style="color:#dc2626;font-weight:700">red</span> = days since last done ·
+  blank = never logged
+</div>
+
+<!-- Day modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h3 id="modalTitle"></h3>
+    <div class="person-row her">
+      <div class="label">Shraddha</div>
+      <div class="sub">✅ Keep up</div>
+      <div class="toggles good">
+        <button class="toggle" data-person="her" data-habit="bath"><span class="em">🛁</span>Bath</button>
+        <button class="toggle" data-person="her" data-habit="gym"><span class="em">💪</span>Gym</button>
+      </div>
+      <div class="sub">⚠️ Cut back</div>
+      <div class="toggles bad">
+        <button class="toggle" data-person="her" data-habit="alcohol"><span class="em">🍺</span>Alcohol</button>
+        <button class="toggle" data-person="her" data-habit="smoke"><span class="em">🚬</span>Smoke</button>
+        <button class="toggle" data-person="her" data-habit="sugar"><span class="em">🍰</span>Sugar</button>
+      </div>
+    </div>
+    <div class="person-row him">
+      <div class="label">Shivam</div>
+      <div class="sub">✅ Keep up</div>
+      <div class="toggles good">
+        <button class="toggle" data-person="him" data-habit="bath"><span class="em">🛁</span>Bath</button>
+        <button class="toggle" data-person="him" data-habit="gym"><span class="em">💪</span>Gym</button>
+      </div>
+      <div class="sub">⚠️ Cut back</div>
+      <div class="toggles bad">
+        <button class="toggle" data-person="him" data-habit="alcohol"><span class="em">🍺</span>Alcohol</button>
+        <button class="toggle" data-person="him" data-habit="smoke"><span class="em">🚬</span>Smoke</button>
+        <button class="toggle" data-person="him" data-habit="sugar"><span class="em">🍰</span>Sugar</button>
+      </div>
+    </div>
+    <button class="btn" id="closeModal">Done</button>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div class="overlay" id="setOverlay">
+  <div class="modal">
+    <h3>⚙️ Private sync setup</h3>
+    <p class="hint">
+      Your data is stored as <b>data.json</b> in your own <b>private</b> GitHub repo.
+      Fill this in once per device. Nothing is sent anywhere else.
+    </p>
+    <div class="field"><label>GitHub username (repo owner)</label><input id="fOwner" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="your-username"></div>
+    <div class="field"><label>Private data repo name</label><input id="fRepo" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="habit-data"></div>
+    <div class="field"><label>File path</label><input id="fPath" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="data.json"></div>
+    <div class="field"><label>Branch</label><input id="fBranch" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="main"></div>
+    <div class="field"><label>Access token (fine-grained, Contents: read &amp; write)</label><input id="fToken" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="github_pat_..."></div>
+    <p class="hint" id="setMsg"></p>
+    <button class="btn" id="saveSettings">Save &amp; connect</button>
+    <button class="btn sec" id="exportBtn">⬇︎ Download backup copy</button>
+    <button class="btn danger" id="wipeBtn">Remove token from this device</button>
+    <button class="btn sec" id="closeSettings">Close</button>
+  </div>
+</div>
+
+<script>
+/* ---------------- config + local cache ---------------- */
+const CFG_KEY  = 'habitCfg';
+const DATA_KEY = 'habitTrackerData';
+const HABITS = ['alcohol', 'smoke', 'sugar', 'bath', 'gym'];
+const MARKS  = ['alcohol', 'smoke', 'sugar', 'bath'];   // shown as icons on the day
+const EMOJI  = { alcohol: '🍺', smoke: '🚬', sugar: '🍰', bath: '🛁' };
+const API = 'https://api.github.com';
+
+let cfg  = safeParse(localStorage.getItem(CFG_KEY)) || {};
+let data = migrate(safeParse(localStorage.getItem(DATA_KEY)) || {});
+let remoteSha = null;
+let dirty = false;
+let syncing = false;
+let saveTimer = null;
+
+let view = new Date(); view.setDate(1);
+let selectedKey = null;
+
+function safeParse(s) { try { return JSON.parse(s || 'null'); } catch (e) { return null; } }
+const saveLocal = () => localStorage.setItem(DATA_KEY, JSON.stringify(data));
+const dkey = (y, m, d) => `${y}-${String(m + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+/* old format had no per-person timestamp; give it 0 so remote edits win */
+function migrate(obj) {
+  for (const k in obj) {
+    const day = obj[k];
+    if (!day || typeof day !== 'object') { delete obj[k]; continue; }
+    for (const p of ['her', 'him']) {
+      if (day[p] && typeof day[p] === 'object' && typeof day[p]._t !== 'number') day[p]._t = 0;
+    }
+  }
+  return obj;
+}
+
+const get = (key, person, habit) => !!(data[key] && data[key][person] && data[key][person][habit]);
+
+function toggle(key, person, habit) {
+  data[key] = data[key] || {};
+  data[key][person] = data[key][person] || { _t: 0 };
+  data[key][person][habit] = !data[key][person][habit];
+  data[key][person]._t = Date.now();
+  saveLocal();
+  dirty = true;
+  queuePush();
+}
+
+/* ---------------- merge: newest edit wins, per person per day ---------------- */
+function mergeData(mine, theirs) {
+  const out = {};
+  const keys = new Set([...Object.keys(mine || {}), ...Object.keys(theirs || {})]);
+  for (const k of keys) {
+    const a = (mine || {})[k] || {}, b = (theirs || {})[k] || {};
+    out[k] = {};
+    for (const p of ['her', 'him']) {
+      const pa = a[p], pb = b[p];
+      if (pa && pb) out[k][p] = (pa._t || 0) >= (pb._t || 0) ? pa : pb;
+      else if (pa)  out[k][p] = pa;
+      else if (pb)  out[k][p] = pb;
+    }
+    if (!out[k].her && !out[k].him) delete out[k];
+  }
+  return out;
+}
+
+/* ---------------- base64 (unicode safe) ---------------- */
+function b64encode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+function b64decode(b64) {
+  const bin = atob(b64.replace(/\s/g, ''));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+/* ---------------- github sync ---------------- */
+const configured = () => !!(cfg.owner && cfg.repo && cfg.path && cfg.token);
+
+function setStatus(text, cls) {
+  const el = document.getElementById('status');
+  el.textContent = text;
+  el.className = 'pill' + (cls ? ' ' + cls : '');
+}
+
+function ghUrl() {
+  return `${API}/repos/${cfg.owner}/${cfg.repo}/contents/${cfg.path}`;
+}
+function ghHeaders() {
+  return {
+    'Authorization': 'Bearer ' + cfg.token,
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28'
+  };
+}
+
+async function pull() {
+  const res = await fetch(ghUrl() + '?ref=' + encodeURIComponent(cfg.branch || 'main') + '&t=' + Date.now(),
+    { headers: ghHeaders(), cache: 'no-store' });
+  if (res.status === 404) { remoteSha = null; return {}; }
+  if (!res.ok) throw new Error('Read failed (' + res.status + ')');
+  const j = await res.json();
+  remoteSha = j.sha;
+  const text = j.content ? b64decode(j.content) : '{}';
+  return migrate(safeParse(text) || {});
+}
+
+async function push() {
+  const body = {
+    message: 'update habits ' + new Date().toISOString(),
+    content: b64encode(JSON.stringify(data, null, 1)),
+    branch: cfg.branch || 'main'
+  };
+  if (remoteSha) body.sha = remoteSha;
+  const res = await fetch(ghUrl(), { method: 'PUT', headers: ghHeaders(), body: JSON.stringify(body) });
+  if (res.status === 409 || res.status === 422) return false;   // someone else wrote first
+  if (!res.ok) throw new Error('Write failed (' + res.status + ')');
+  const j = await res.json();
+  remoteSha = j.content && j.content.sha;
+  return true;
+}
+
+async function sync() {
+  if (!configured()) { setStatus('not connected'); return; }
+  if (syncing) return;
+  syncing = true;
+  setStatus('syncing…', 'busy');
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const remote = await pull();
+      data = mergeData(data, remote);
+      saveLocal();
+      render();
+      if (await push()) { dirty = false; break; }
+    }
+    setStatus('synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'ok');
+  } catch (e) {
+    setStatus(navigator.onLine ? (e.message || 'sync error') : 'offline — saved locally', 'err');
+  } finally {
+    syncing = false;
+  }
+}
+
+function queuePush() {
+  if (!configured()) return;
+  setStatus('saving…', 'busy');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(sync, 1200);
+}
+
+/* ---------------- render ---------------- */
+function render() {
+  const y = view.getFullYear(), m = view.getMonth();
+  const today = new Date();
+  const todayKey = dkey(today.getFullYear(), today.getMonth(), today.getDate());
+  document.getElementById('monthLabel').textContent =
+    view.toLocaleString('en', { month: 'long', year: 'numeric' });
+
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => {
+    const el = document.createElement('div'); el.className = 'dow'; el.textContent = d;
+    grid.appendChild(el);
+  });
+
+  const firstDow = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  for (let i = 0; i < firstDow; i++) {
+    const el = document.createElement('div'); el.className = 'day empty'; grid.appendChild(el);
+  }
+  for (let d = 1; d <= days; d++) {
+    const key = dkey(y, m, d);
+    const el = document.createElement('div');
+    el.className = 'day';
+    if (key === todayKey) el.classList.add('today');
+    if (new Date(y, m, d) > today) el.classList.add('future');
+    const herIcons = MARKS.filter(h => get(key,'her',h)).map(h => EMOJI[h]).join('');
+    const himIcons = MARKS.filter(h => get(key,'him',h)).map(h => EMOJI[h]).join('');
+    el.innerHTML =
+      `<div class="half her ${get(key,'her','gym') ? 'gym-ring' : ''}"></div>` +
+      `<div class="half him ${get(key,'him','gym') ? 'gym-ring' : ''}"></div>` +
+      `<div class="num">${d}</div>` +
+      `<div class="icons-her">${herIcons}</div>` +
+      `<div class="icons-him">${himIcons}</div>`;
+    el.addEventListener('click', () => openModal(key, d));
+    grid.appendChild(el);
+  }
+  renderSummary(y, m, days);
+  renderAlerts(today);
+}
+
+/* ---------------- alerts + encouragement ---------------- */
+const DETOX_DAYS = 5;
+const MILESTONE  = 30;
+const NAME = { her: 'Shraddha', him: 'Shivam' };
+
+function renderAlerts(today) {
+  const out = [];
+
+  // continuous bad habit -> gentle detox nudge
+  const badLabel = {
+    alcohol: ['🍺', 'alcohol', 'an alcohol-free day'],
+    smoke:   ['🚬', 'smoking', 'a smoke-free day'],
+    sugar:   ['🍰', 'sugar',   'a sugar-free day']
+  };
+  ['him', 'her'].forEach(p => {
+    ['alcohol', 'smoke', 'sugar'].forEach(h => {
+      const run = currentStreak(p, h, today);
+      if (run >= DETOX_DAYS) {
+        const [em, word, suggestion] = badLabel[h];
+        out.push(`<div class="alert warn"><span class="ic">${em}</span><div>` +
+          `<b>${NAME[p]} has had ${word} ${run} days in a row.</b> ` +
+          `Might be a good moment to plan ${suggestion} together — even one break day resets the pattern.` +
+          `</div></div>`);
+      }
+    });
+  });
+
+  // month-long good runs -> encouragement
+  const goodLabel = { bath: ['🛁', 'bath'], gym: ['💪', 'gym'] };
+  ['her', 'him'].forEach(p => {
+    ['bath', 'gym'].forEach(h => {
+      const run = currentStreak(p, h, today);
+      if (run >= MILESTONE) {
+        const [em, word] = goodLabel[h];
+        const months = Math.floor(run / 30);
+        out.push(`<div class="alert cheer"><span class="ic">${em}</span><div>` +
+          `<b>${NAME[p]} hit ${run} days of ${word} in a row${months > 1 ? ` — ${months} months!` : ' — a full month!'}</b> ` +
+          `That is a real habit now. Worth celebrating.` +
+          `</div></div>`);
+      }
+    });
+  });
+
+  // month-long clean runs -> encouragement
+  ['her', 'him'].forEach(p => {
+    ['alcohol', 'smoke', 'sugar'].forEach(h => {
+      const n = daysSince(p, h, today);
+      if (n !== null && n >= MILESTONE) {
+        const [em, word] = badLabel[h];
+        out.push(`<div class="alert cheer"><span class="ic">🎉</span><div>` +
+          `<b>${NAME[p]} has been ${em} ${word}-free for ${n} days.</b> ` +
+          `Over a month clean — that streak is worth protecting.` +
+          `</div></div>`);
+      }
+    });
+  });
+
+  document.getElementById('alerts').innerHTML = out.join('');
+}
+
+function renderSummary(y, m, days) {
+  const today = new Date();
+  const todayKey = dkey(today.getFullYear(), today.getMonth(), today.getDate());
+
+  ['her','him'].forEach(person => {
+    const c = { alcohol: 0, smoke: 0, sugar: 0, bath: 0, gym: 0 };
+    for (let d = 1; d <= days; d++) {
+      const key = dkey(y, m, d);
+      HABITS.forEach(h => { if (get(key, person, h)) c[h]++; });
+    }
+
+    /* positive-habit streaks:
+       done today        -> green, current run  e.g. "12d"
+       done earlier only -> red, days since     e.g. "28d ago"
+       never recorded    -> blank                                */
+    const strk = [['bath','🛁'], ['gym','💪']].map(([h, em]) => {
+      const since = daysSince(person, h, today);
+      let right = '';
+      if (since === 0)        right = `<b class="ok">${currentStreak(person, h, today)}d</b>`;
+      else if (since !== null) right = `<b class="due">${since}d ago</b>`;
+      return `<div class="strk"><span>${em}</span><span>${right}</span></div>`;
+    }).join('');
+
+    document.getElementById(person === 'her' ? 'sumHer' : 'sumHim').innerHTML =
+      `<div class="cap">This month</div>` +
+      `<div class="line">🛁 ${c.bath} · 💪 ${c.gym}</div>` +
+      `<div class="line">🍺 ${c.alcohol} · 🚬 ${c.smoke} · 🍰 ${c.sugar}</div>` +
+      `<hr>` +
+      `<div class="cap">🔥 Streak</div>` + strk;
+  });
+}
+
+function daysSince(person, habit, today) {
+  for (let i = 0; i < 400; i++) {
+    const t = new Date(today); t.setDate(t.getDate() - i);
+    if (get(dkey(t.getFullYear(), t.getMonth(), t.getDate()), person, habit)) return i;
+  }
+  return null;
+}
+
+/* consecutive days ending today (or yesterday) where habit was done */
+function currentStreak(person, habit, today) {
+  let n = 0;
+  for (let i = 0; i < 400; i++) {
+    const t = new Date(today); t.setDate(t.getDate() - i);
+    if (get(dkey(t.getFullYear(), t.getMonth(), t.getDate()), person, habit)) n++;
+    else if (i > 0) break;          // today not yet marked -> don't break the run
+  }
+  return n;
+}
+
+/* ---------------- day modal ---------------- */
+function openModal(key, dayNum) {
+  selectedKey = key;
+  document.getElementById('modalTitle').textContent =
+    view.toLocaleString('en', { month: 'long' }) + ' ' + dayNum;
+  document.querySelectorAll('#overlay .toggle').forEach(b => {
+    b.classList.toggle('on', get(key, b.dataset.person, b.dataset.habit));
+  });
+  document.getElementById('overlay').classList.add('open');
+}
+document.querySelectorAll('#overlay .toggle').forEach(b => {
+  b.addEventListener('click', () => {
+    toggle(selectedKey, b.dataset.person, b.dataset.habit);
+    b.classList.toggle('on');
+  });
+});
+function closeDay() { document.getElementById('overlay').classList.remove('open'); render(); }
+document.getElementById('closeModal').addEventListener('click', closeDay);
+document.getElementById('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeDay(); });
+
+/* ---------------- settings ---------------- */
+const setOv = document.getElementById('setOverlay');
+document.getElementById('gearBtn').addEventListener('click', () => {
+  fOwner.value = cfg.owner || '';
+  fRepo.value  = cfg.repo  || '';
+  fPath.value  = cfg.path  || 'data.json';
+  fBranch.value= cfg.branch|| 'main';
+  fToken.value = cfg.token || '';
+  setMsg.textContent = '';
+  setOv.classList.add('open');
+});
+document.getElementById('closeSettings').addEventListener('click', () => setOv.classList.remove('open'));
+setOv.addEventListener('click', e => { if (e.target.id === 'setOverlay') setOv.classList.remove('open'); });
+
+document.getElementById('saveSettings').addEventListener('click', async () => {
+  cfg = {
+    owner: fOwner.value.trim(),
+    repo:  fRepo.value.trim(),
+    path:  fPath.value.trim() || 'data.json',
+    branch:fBranch.value.trim() || 'main',
+    token: fToken.value.trim()
+  };
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+  setMsg.textContent = 'Connecting…';
+  remoteSha = null;
+  dirty = true;
+  await sync();
+  setMsg.textContent = document.getElementById('status').textContent.startsWith('synced')
+    ? '✅ Connected. Data is syncing to your private repo.'
+    : '⚠️ ' + document.getElementById('status').textContent;
+});
+
+document.getElementById('wipeBtn').addEventListener('click', () => {
+  localStorage.removeItem(CFG_KEY);
+  cfg = {}; remoteSha = null;
+  fToken.value = '';
+  setStatus('not connected');
+  setMsg.textContent = 'Token removed from this device. Calendar data still cached here.';
+});
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'habit-data-backup.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+/* ---------------- nav + lifecycle ---------------- */
+document.getElementById('prev').addEventListener('click', () => { view.setMonth(view.getMonth() - 1); render(); });
+document.getElementById('next').addEventListener('click', () => { view.setMonth(view.getMonth() + 1); render(); });
+document.getElementById('syncBtn').addEventListener('click', sync);
+
+window.addEventListener('online', () => { if (dirty || configured()) sync(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && configured()) sync(); });
+
+render();
+if (configured()) sync(); else setStatus('tap ⚙️ to connect');
+</script>
+</body>
+</html>
