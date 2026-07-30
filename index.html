@@ -261,18 +261,21 @@
   <div class="modal">
     <h3>⚙️ Private sync setup</h3>
     <p class="hint">
-      Your data is stored as <b>data.json</b> in your own <b>private</b> GitHub repo.
-      Fill this in once per device. Nothing is sent anywhere else.
+      Data is stored in one JSON file in <b>Shraddha's Google Drive</b>, reached through
+      your own Apps Script web app. Enter these once per device.
     </p>
-    <div class="field"><label>GitHub username (repo owner)</label><input id="fOwner" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="your-username"></div>
-    <div class="field"><label>Private data repo name</label><input id="fRepo" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="habit-data"></div>
-    <div class="field"><label>File path</label><input id="fPath" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="data.json"></div>
-    <div class="field"><label>Branch</label><input id="fBranch" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="main"></div>
-    <div class="field"><label>Access token (fine-grained, Contents: read &amp; write)</label><input id="fToken" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="github_pat_..."></div>
+    <div class="field">
+      <label>Web app URL (ends in /exec)</label>
+      <input id="fUrl" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/.../exec">
+    </div>
+    <div class="field">
+      <label>Shared PIN</label>
+      <input id="fPin" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="the PIN you set in the script">
+    </div>
     <p class="hint" id="setMsg"></p>
     <button class="btn" id="saveSettings">Save &amp; connect</button>
     <button class="btn sec" id="exportBtn">⬇︎ Download backup copy</button>
-    <button class="btn danger" id="wipeBtn">Remove token from this device</button>
+    <button class="btn danger" id="wipeBtn">Disconnect this device</button>
     <button class="btn sec" id="closeSettings">Close</button>
   </div>
 </div>
@@ -284,11 +287,9 @@ const DATA_KEY = 'habitTrackerData';
 const HABITS = ['alcohol', 'smoke', 'sugar', 'bath', 'gym'];
 const MARKS  = ['alcohol', 'smoke', 'sugar', 'bath'];   // shown as icons on the day
 const EMOJI  = { alcohol: '🍺', smoke: '🚬', sugar: '🍰', bath: '🛁' };
-const API = 'https://api.github.com';
 
 let cfg  = safeParse(localStorage.getItem(CFG_KEY)) || {};
 let data = migrate(safeParse(localStorage.getItem(DATA_KEY)) || {});
-let remoteSha = null;
 let dirty = false;
 let syncing = false;
 let saveTimer = null;
@@ -342,22 +343,8 @@ function mergeData(mine, theirs) {
   return out;
 }
 
-/* ---------------- base64 (unicode safe) ---------------- */
-function b64encode(str) {
-  const bytes = new TextEncoder().encode(str);
-  let bin = '';
-  bytes.forEach(b => bin += String.fromCharCode(b));
-  return btoa(bin);
-}
-function b64decode(b64) {
-  const bin = atob(b64.replace(/\s/g, ''));
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
-}
-
-/* ---------------- github sync ---------------- */
-const configured = () => !!(cfg.owner && cfg.repo && cfg.path && cfg.token);
+/* ---------------- google drive sync (via apps script) ---------------- */
+const configured = () => !!(cfg.url && cfg.pin);
 
 function setStatus(text, cls) {
   const el = document.getElementById('status');
@@ -365,56 +352,46 @@ function setStatus(text, cls) {
   el.className = 'pill' + (cls ? ' ' + cls : '');
 }
 
-function ghUrl() {
-  return `${API}/repos/${cfg.owner}/${cfg.repo}/contents/${cfg.path}`;
-}
-function ghHeaders() {
-  return {
-    'Authorization': 'Bearer ' + cfg.token,
-    'Accept': 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28'
-  };
+/* text/plain keeps this a "simple" request so no CORS preflight is needed —
+   Apps Script web apps don't answer OPTIONS. */
+async function call(payload) {
+  const res = await fetch(cfg.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(Object.assign({ pin: cfg.pin }, payload)),
+    redirect: 'follow',
+    cache: 'no-store'
+  });
+  if (!res.ok) throw new Error('Drive error (' + res.status + ')');
+  const text = await res.text();
+  const j = safeParse(text);
+  if (!j)        throw new Error('Bad response — check the /exec URL');
+  if (j.error)   throw new Error(j.error === 'wrong PIN' ? 'Wrong PIN' : j.error);
+  return j;
 }
 
 async function pull() {
-  const res = await fetch(ghUrl() + '?ref=' + encodeURIComponent(cfg.branch || 'main') + '&t=' + Date.now(),
-    { headers: ghHeaders(), cache: 'no-store' });
-  if (res.status === 404) { remoteSha = null; return {}; }
-  if (!res.ok) throw new Error('Read failed (' + res.status + ')');
-  const j = await res.json();
-  remoteSha = j.sha;
-  const text = j.content ? b64decode(j.content) : '{}';
-  return migrate(safeParse(text) || {});
+  const j = await call({ action: 'read' });
+  return migrate(j.data || {});
 }
 
 async function push() {
-  const body = {
-    message: 'update habits ' + new Date().toISOString(),
-    content: b64encode(JSON.stringify(data, null, 1)),
-    branch: cfg.branch || 'main'
-  };
-  if (remoteSha) body.sha = remoteSha;
-  const res = await fetch(ghUrl(), { method: 'PUT', headers: ghHeaders(), body: JSON.stringify(body) });
-  if (res.status === 409 || res.status === 422) return false;   // someone else wrote first
-  if (!res.ok) throw new Error('Write failed (' + res.status + ')');
-  const j = await res.json();
-  remoteSha = j.content && j.content.sha;
+  await call({ action: 'write', data: data });
   return true;
 }
 
 async function sync() {
-  if (!configured()) { setStatus('not connected'); return; }
+  if (!configured()) { setStatus('tap ⚙️ to connect'); return; }
   if (syncing) return;
   syncing = true;
   setStatus('syncing…', 'busy');
   try {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const remote = await pull();
-      data = mergeData(data, remote);
-      saveLocal();
-      render();
-      if (await push()) { dirty = false; break; }
-    }
+    const remote = await pull();
+    data = mergeData(data, remote);
+    saveLocal();
+    render();
+    await push();
+    dirty = false;
     setStatus('synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'ok');
   } catch (e) {
     setStatus(navigator.onLine ? (e.message || 'sync error') : 'offline — saved locally', 'err');
@@ -605,11 +582,8 @@ document.getElementById('overlay').addEventListener('click', e => { if (e.target
 /* ---------------- settings ---------------- */
 const setOv = document.getElementById('setOverlay');
 document.getElementById('gearBtn').addEventListener('click', () => {
-  fOwner.value = cfg.owner || '';
-  fRepo.value  = cfg.repo  || '';
-  fPath.value  = cfg.path  || 'data.json';
-  fBranch.value= cfg.branch|| 'main';
-  fToken.value = cfg.token || '';
+  fUrl.value = cfg.url || '';
+  fPin.value = cfg.pin || '';
   setMsg.textContent = '';
   setOv.classList.add('open');
 });
@@ -617,29 +591,29 @@ document.getElementById('closeSettings').addEventListener('click', () => setOv.c
 setOv.addEventListener('click', e => { if (e.target.id === 'setOverlay') setOv.classList.remove('open'); });
 
 document.getElementById('saveSettings').addEventListener('click', async () => {
-  cfg = {
-    owner: fOwner.value.trim(),
-    repo:  fRepo.value.trim(),
-    path:  fPath.value.trim() || 'data.json',
-    branch:fBranch.value.trim() || 'main',
-    token: fToken.value.trim()
-  };
+  const url = fUrl.value.trim();
+  if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(url)) {
+    setMsg.textContent = '⚠️ That does not look like a web app URL. It should start with ' +
+                         'https://script.google.com/ and end with /exec';
+    return;
+  }
+  cfg = { url: url, pin: fPin.value.trim() };
   localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
   setMsg.textContent = 'Connecting…';
-  remoteSha = null;
   dirty = true;
   await sync();
-  setMsg.textContent = document.getElementById('status').textContent.startsWith('synced')
-    ? '✅ Connected. Data is syncing to your private repo.'
-    : '⚠️ ' + document.getElementById('status').textContent;
+  const st = document.getElementById('status').textContent;
+  setMsg.textContent = st.startsWith('synced')
+    ? '✅ Connected. Data is saving to Google Drive.'
+    : '⚠️ ' + st;
 });
 
 document.getElementById('wipeBtn').addEventListener('click', () => {
   localStorage.removeItem(CFG_KEY);
-  cfg = {}; remoteSha = null;
-  fToken.value = '';
-  setStatus('not connected');
-  setMsg.textContent = 'Token removed from this device. Calendar data still cached here.';
+  cfg = {};
+  fUrl.value = ''; fPin.value = '';
+  setStatus('tap ⚙️ to connect');
+  setMsg.textContent = 'Disconnected. Calendar data is still cached on this device.';
 });
 
 document.getElementById('exportBtn').addEventListener('click', () => {
